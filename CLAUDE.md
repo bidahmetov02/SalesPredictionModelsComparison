@@ -1,64 +1,81 @@
 # CLAUDE.md
 
-**Source of truth: `experimental_design.md`.** Read it before making any decision about data, models, metrics, or protocol. This file summarizes it and adds engineering conventions; if the two ever disagree, `experimental_design.md` wins.
+Working instructions for this repo. The experiment itself is specified in **`experimental_design.md`** — that file is the source of truth. If anything here disagrees with it, `experimental_design.md` wins.
 
-## Project purpose
+This repo is **public**. A README for general readers will be added later; until then, this file and `experimental_design.md` are the documentation.
 
-Academic benchmarking experiment (university article, supporting a SaaS demand-forecasting app): compare statistical models (Naive, Seasonal Naive, AutoETS, AutoARIMA, Croston via `statsforecast`), LightGBM (one global model per condition), and Lag-Llama (zero-shot; fine-tuning optional) for 30-day SKU-level demand forecasting on a stratified 500-series sample of the M5 dataset, under two joint constraints: short sales history and commodity CPU-only hardware. Both accuracy (MAE, RMSSE) and computational cost (wall-clock time, peak RSS memory) are experimental results — the headline figure is an accuracy-vs-compute scatter plot.
+## What this project is
+
+A benchmarking experiment for a university article. We compare three families of forecasting models on 30-day, SKU-level demand forecasting:
+
+- **Statistical**: Naive, Seasonal Naive, AutoETS, AutoARIMA, Croston — via `statsforecast`
+- **Gradient-boosted trees**: LightGBM, one global model per condition
+- **Foundation model**: Lag-Llama, zero-shot (fine-tuning is optional)
+
+The data is a stratified sample of 500 SKU–store series from the M5 (Walmart) dataset. The question: how do these models compare when sales history is short **and** hardware is a commodity laptop CPU? Accuracy (MAE, RMSSE) and computational cost (wall-clock time, peak memory) are both experimental results. The headline figure of the paper is an accuracy-vs-compute scatter plot.
 
 ## Experimental grid
 
-Every model runs under every truncation condition. Same 500 series (fixed, seeded sample), same 30-day test window (final 30 days) in all conditions.
+Every model runs under three history-truncation conditions. The 500 series are sampled once with a fixed seed. The test window is always the same: the final 30 days, never seen in training.
 
 | | H-6 (~180 days) | H-12 (~365 days) | H-full (~5 years) |
 |---|---|---|---|
-| Naive, Seasonal Naive (m=7), AutoETS, AutoARIMA, Croston (`statsforecast`) | ✓ | ✓ | ✓ |
-| LightGBM (one global model per condition) | ✓ | ✓ | ✓ |
+| Statistical (5 models, `statsforecast`) | ✓ | ✓ | ✓ |
+| LightGBM (global model per condition) | ✓ | ✓ | ✓ |
 | Lag-Llama zero-shot | ✓ | ✓ | ✓ |
-| Lag-Llama fine-tuned (optional, may be dropped) | (✓) | (✓) | (✓) |
+| Lag-Llama fine-tuned (optional) | (✓) | (✓) | (✓) |
 
-Primary evaluation: single 30-day holdout. Rolling-origin (3 folds) is optional/secondary. One store; a second store is at most a robustness appendix.
+Primary evaluation is a single 30-day holdout. Rolling-origin evaluation (3 folds) is a secondary, optional check. One store is enough; a second store is at most a robustness appendix.
 
 ## Hard constraints
 
-- **CPU-only, everywhere.** Lag-Llama must run with MPS/GPU explicitly disabled (`device="cpu"`, never `mps`). This is a measurement-parity requirement, not a workaround — do not "helpfully" enable MPS.
-- **Timing and memory are results.** Measurement protocol: wall-clock training time for the 500-series batch, wall-clock inference time for one 30-day forecast batch, peak RSS via `psutil`. Each timing run 3 times; report the median. Don't add code inside timed sections that isn't part of the model's work.
-- **Fixed seeds everywhere** — series sampling, LightGBM, PyTorch/Lag-Llama. All seeds live in one config module, never inlined.
-- **No hyperparameter search.** Fixed, modest, stated defaults. This is a design choice of the paper; do not tune.
-- **uv for everything**: `uv add` for dependencies, `uv run` to execute. Never pip, never conda. Keep `uv.lock` committed — pinned versions are reported in the paper.
-- **Minimal dependencies.** Before adding a package, check whether an existing one covers it.
-- Reference machine: M2 MacBook Air. Nothing may assume more than 16 GB RAM.
+- **CPU-only, for every model.** Lag-Llama must run with `device="cpu"` — MPS/GPU explicitly disabled. This keeps timings comparable across model families. Do not "helpfully" enable MPS.
+- **Timing and memory are results, not incidentals.** We measure: training wall-clock for the 500-series batch, inference wall-clock for one 30-day forecast batch, and peak RSS via `psutil`. Every timing runs 3 times; we report the median. Nothing extraneous goes inside a timed section.
+- **Fixed seeds everywhere** — sampling, LightGBM, PyTorch. All seeds live in `src/config.py`, never inline.
+- **No hyperparameter search.** Fixed, modest defaults, stated openly in the paper. Do not tune.
+- **uv for everything.** `uv add` to install, `uv run` to execute. Never pip, never conda. `uv.lock` stays committed — the paper reports the pinned versions.
+- **Minimal dependencies.** Before adding a package, check whether an existing one already covers the need.
+- Reference machine: M2 MacBook Air, 16 GB RAM. Nothing may assume more.
 
-## Repo structure (intended)
+## Repo layout
 
 ```
-experimental_design.md      # source of truth for the experiment
-CLAUDE.md
-pyproject.toml / uv.lock
+experimental_design.md      # the experiment spec — source of truth
+CLAUDE.md                   # this file
+pyproject.toml / uv.lock    # dependencies, pinned
 src/
-    config.py               # seeds, paths, condition definitions, model hyperparameters
-    data.py                 # M5 download/load + stratified 500-series sampling + truncation
-    features.py             # LightGBM feature engineering (lags, rolling means, calendar, price)
+    config.py               # seeds, paths, conditions, model hyperparameters
+    data.py                 # M5 download, stratified sampling, truncation
+    features.py             # LightGBM features (lags, rolling means, calendar, price)
     metrics.py              # MAE, RMSSE, optional CRPS
-    harness.py              # timing (3-run median) + peak-RSS measurement wrapper
-    run_stats.py            # statsforecast runner (all 5 statistical models)
-    run_lgbm.py             # LightGBM global-model runner
-    run_lagllama.py         # Lag-Llama runner (zero-shot; optional fine-tune)
-    aggregate.py            # collect per-run results into paper tables/figures
+    harness.py              # timing (3-run median) and peak-memory measurement
+    run_stats.py            # runs the 5 statistical models
+    run_lgbm.py             # runs LightGBM
+    run_lagllama.py         # runs Lag-Llama
+    aggregate.py            # collects results into the paper's tables and figures
 data/
-    raw/                    # M5 CSVs from Kaggle (gitignored)
-    processed/              # sampled + truncated series (gitignored, regenerable)
-results/                    # one CSV per model × condition run, plus aggregated tables (committed)
+    raw/                    # M5 CSVs from Kaggle — gitignored, never committed
+    processed/              # sampled + truncated series — gitignored, regenerable
+results/                    # result CSVs and aggregated tables — committed
 ```
 
-Each runner is a script executed as `uv run python -m src.run_<x> --condition H-6` (or similar), writes a results CSV, and exits. Runners share `config`, `metrics`, and `harness`; they do not import each other.
+Each runner is a standalone script: it takes a condition (e.g. `uv run python -m src.run_stats --condition H-6`), writes a results CSV, and exits. Runners share `config`, `metrics`, and `harness`, but never import each other.
 
 ## Coding conventions
 
-- **Boring over clever.** Plain functions and scripts; no classes unless a library demands one, no abstractions for a single use site, no premature generality. This is a reproducible pipeline for a paper, not a framework.
-- All experiment parameters (sample size, condition lengths, horizon, seeds, hyperparameters) are named constants in `src/config.py` — nothing magic in runner code.
-- Deterministic, idempotent steps: rerunning a stage overwrites its output and produces the same result. Intermediate data goes to `data/processed/`, results to `results/` as plain CSV.
-- Raw M5 data is never modified and never committed; `data/` stays gitignored except for structure.
-- Type hints on function signatures; comments only for non-obvious experimental-protocol reasons (e.g. why MPS is disabled), not narration.
-- No notebooks in the pipeline. If notebooks are used at all, they are for figure polishing only and read from `results/`.
-- Python ≥3.12, per `pyproject.toml`.
+- **Boring over clever.** Plain functions and scripts. No classes unless a library requires one. No abstractions with a single use site. This is a reproducible pipeline for a paper, not a framework.
+- Every experiment parameter (sample size, history lengths, horizon, seeds, hyperparameters) is a named constant in `src/config.py`. No magic numbers in runner code.
+- Every stage is deterministic and idempotent: rerunning it overwrites its output and produces the same result.
+- Intermediate data goes to `data/processed/`; results go to `results/` as plain CSV.
+- Type hints on function signatures. Comments only where the experimental protocol needs explaining (e.g. why MPS is off) — no narration.
+- No notebooks in the pipeline. Notebooks, if used at all, only polish figures from `results/`.
+- Python ≥ 3.12.
+
+## Public repo — no secrets, no data
+
+Everything committed here is published. Two standing rules:
+
+1. **No credentials, ever.** Kaggle tokens, `.env` files, API keys — none of it enters the working tree. Code reads credentials only from their standard locations outside the repo (e.g. `~/.kaggle/kaggle.json`). Never hardcode a secret or a personal path, even temporarily. `.gitignore` blocks the common cases, but the gitignore is a safety net, not the rule.
+2. **No dataset files.** The M5 data is under Kaggle competition terms and is never committed — the repo ships only the script that downloads it.
+
+Before committing, check `git diff --staged` for anything that looks like a credential, a private path, or a data file. When in doubt, leave it out.

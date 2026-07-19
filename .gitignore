@@ -11,3 +11,10 @@ wheels/
 
 # Experiment data (regenerable / downloaded from Kaggle)
 data/
+
+# Secrets — never commit credentials (repo is public)
+.env
+.env.*
+kaggle.json
+*.pem
+*.key
