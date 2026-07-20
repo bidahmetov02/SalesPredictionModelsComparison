@@ -18,3 +18,6 @@ data/
 kaggle.json
 *.pem
 *.key
+
+# Local instructions file
+CLAUDE.md
