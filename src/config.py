@@ -51,6 +51,7 @@ N_VOLUME_TERCILES: Final[int] = 3
 # Training history length in days, ending at the same date in every condition.
 # H-full uses the entire available history (no truncation).
 HISTORY_CONDITIONS: Final[dict[str, int | None]] = {
+    "H-1": 30,
     "H-6": 180,
     "H-12": 365,
     "H-full": None,

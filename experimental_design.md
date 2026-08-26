@@ -20,6 +20,7 @@ Each series is truncated to simulate data scarcity. Three training-history lengt
 
 | Condition | Training history |
 |---|---|
+| H-1  | last month (30 days) |
 | H-6  | last 6 months (180 days) |
 | H-12 | last 12 months (365 days) |
 | H-full | all history since the item's first sale (reference upper bound) |
@@ -39,6 +40,8 @@ The **test window is identical in all conditions**: the final 30 days of the dat
 | Foundation model | Lag-Llama: (a) zero-shot, (b) fine-tuned per condition (optional) | official `lag-llama` repo, PyTorch |
 
 **LightGBM features.** Lag features (1, 7, 14, 28 days), rolling means (7, 28), calendar features from the M5 calendar (day-of-week, month, an event flag set when either `event_name_1` or `event_name_2` is present, and the store's SNAP-benefit-day flag), sell price. Rolling means are computed on lagged values, so no feature for day *t* reads day *t* or later. Recursive multi-step forecasting for the 30-day horizon: each predicted day becomes the lag input for the next. Modest fixed hyperparameters (no per-condition tuning — tuning cost is itself part of the compute story and is noted, not optimized away).
+
+**The feature window bites hardest at H-1.** A row is only usable for training once its 28-day lag and rolling mean exist, so a 30-day history yields **two usable days per series — 1,000 training rows, against 76,000 at H-6**. This is a structural property of a global tree model with a 28-day window, not a failure to be tuned away: shortening the lags for the shortest condition would be per-condition tuning and would break comparability across the grid. The feature set is therefore held fixed everywhere and the consequence reported as a result.
 
 **Lag-Llama.** Pretrained checkpoint, probabilistic output (100 sample paths per series); point forecast = median of samples. The checkpoint's trained attention context is 32 days, but it additionally draws 84 lag features reaching back 1,092 days, giving an effective receptive field of **1,124 days** — so the truncation conditions do genuinely change what the model can see, rather than presenting it with identical inputs. Context length is left at the checkpoint's trained value; enlarging it would be both hyperparameter tuning and off-distribution for the pretrained weights. Zero-shot is the primary mode; fine-tuning (few epochs, CPU) is a secondary experiment and may be dropped if compute cost is prohibitive — which is itself a reportable finding.
 
