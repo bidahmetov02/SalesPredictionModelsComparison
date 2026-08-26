@@ -59,6 +59,18 @@ TEST_HORIZON_DAYS: Final[int] = 30
 
 # --- Evaluation ------------------------------------------------------------
 
+# Demand cannot be negative, so forecasts are floored at zero before scoring.
+# Applied identically in every runner: it is a stated post-processing step, not
+# a per-model advantage.
+CLIP_NEGATIVE_FORECASTS: Final[bool] = True
+
+
+# The RMSSE denominator is computed once, from this condition's training data,
+# and reused when scoring every condition. A per-condition denominator would
+# divide each condition's errors by a different number, making the H-6 vs
+# H-full comparison — the point of the experiment — meaningless.
+RMSSE_SCALE_CONDITION: Final[str] = "H-full"
+
 # Rolling-origin evaluation is secondary/optional (see experimental_design.md 7).
 N_ROLLING_FOLDS: Final[int] = 3
 ROLLING_STEP_DAYS: Final[int] = 30
@@ -69,7 +81,11 @@ N_TIMING_RUNS: Final[int] = 3  # each timing is run 3x; the median is reported
 
 # --- Statistical models (statsforecast) ------------------------------------
 
+FREQ: Final[str] = "D"
 SEASONAL_PERIOD: Final[int] = 7  # weekly seasonality (Seasonal Naive, ETS, ARIMA)
+
+# -1 uses every core, matching the "per-series fitting, multi-core CPU" premise.
+STATSFORECAST_N_JOBS: Final[int] = -1
 
 # --- LightGBM ----------------------------------------------------------------
 
@@ -95,3 +111,13 @@ LGBM_NUM_BOOST_ROUND: Final[int] = 100
 # so timings stay comparable across model families.
 LAGLLAMA_DEVICE: Final[str] = "cpu"
 LAGLLAMA_NUM_SAMPLES: Final[int] = 100  # sample paths; point forecast = median
+
+LAGLLAMA_CHECKPOINT_REPO: Final[str] = "time-series-foundation-models/Lag-Llama"
+LAGLLAMA_CHECKPOINT_FILE: Final[str] = "lag-llama.ckpt"
+
+# The context window the model attends over. Note that this caps how much
+# history Lag-Llama can use, independently of the truncation condition: if it is
+# shorter than H-6, all three conditions present the model with the same input.
+# Whether that happens is a reportable result, not something to tune away.
+LAGLLAMA_CONTEXT_LENGTH: Final[int] = 32
+LAGLLAMA_BATCH_SIZE: Final[int] = 32
