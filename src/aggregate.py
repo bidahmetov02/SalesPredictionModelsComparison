@@ -23,6 +23,8 @@ from matplotlib.ticker import FuncFormatter, NullFormatter
 import pandas as pd
 from scipy.stats import wilcoxon
 
+from pathlib import Path
+
 from src.config import DATA_PROCESSED_DIR, HISTORY_CONDITIONS, RESULTS_DIR
 
 # Families drive colour in the figure. The first three categorical slots are the
@@ -160,7 +162,7 @@ def significance_tests(per_series: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def headline_figure(compute: pd.DataFrame, path) -> None:
+def headline_figure(compute: pd.DataFrame, path: Path) -> None:
     """Accuracy against compute, one panel per condition.
 
     Small multiples rather than one crowded axis: 18 points on a single scatter

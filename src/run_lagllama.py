@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import torch
 from gluonts.dataset.pandas import PandasDataset
+from gluonts.torch.model.predictor import PyTorchPredictor
 from gluonts.torch.distributions.studentT import StudentTOutput
 from gluonts.torch.modules.loss import NegativeLogLikelihood
 from huggingface_hub import hf_hub_download
@@ -54,7 +55,7 @@ def allow_checkpoint_globals() -> None:
     torch.serialization.add_safe_globals([StudentTOutput, NegativeLogLikelihood])
 
 
-def build_predictor(checkpoint_path: str):
+def build_predictor(checkpoint_path: str) -> PyTorchPredictor:
     """Construct the zero-shot predictor from the pretrained checkpoint.
 
     The architecture arguments must match the checkpoint, so they are read from
@@ -94,6 +95,14 @@ def main() -> None:
         "written under a separate filename so they cannot overwrite a real run",
     )
     args = parser.parse_args()
+
+    # CPU-only is a premise of the experiment, not a default: accelerated
+    # inference here would make this family's timings incomparable with the
+    # others. Fail loudly rather than silently reporting GPU numbers.
+    if LAGLLAMA_DEVICE != "cpu":
+        raise ValueError(
+            f"LAGLLAMA_DEVICE is {LAGLLAMA_DEVICE!r}; the protocol requires 'cpu'"
+        )
 
     allow_checkpoint_globals()
     torch.manual_seed(RANDOM_SEED)

@@ -62,7 +62,10 @@ def calendar_table(dates: pd.DatetimeIndex, calendar: pd.DataFrame) -> pd.DataFr
             "day_of_week": table.index.dayofweek,
             "month": table.index.month,
             "snap": table[snap_column].to_numpy(dtype="float64"),
-            "is_event": table["event_name_1"].notna().to_numpy(dtype="float64"),
+            # M5 records up to two events on a date; either one marks the day.
+            "is_event": (
+                table["event_name_1"].notna() | table["event_name_2"].notna()
+            ).to_numpy(dtype="float64"),
         },
         index=dates,
     )
